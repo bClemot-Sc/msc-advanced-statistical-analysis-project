@@ -3,6 +3,10 @@ graphics.off() # Ferme les fenêtres ouvertes lors des exécutions précédentes
 
 # Packages
 library(corrplot)
+library(ade4)
+library(lubridate)  # Convertir données temporelles en secondes
+library(car)  # fonction vif() et anova()
+
 
 # Define WD
 setwd("C:/Users/p_a_8/OneDrive/Bureau/M2 MODE/COURS/Semestre 3/ASA/PROJET")
@@ -52,14 +56,28 @@ colnames(data)[1:22] <- c(
 # On supprime la colonne "ID" inutile
 data <- data[, !colnames(data) %in% "ID"]
 
-# Conversion des variables "heures"
-data$takeoff_time <-  format(as.POSIXct(data$takeoff_time, format = "%H:%M:%S"), format = "%H:%M:%S")
-data$end_flight_time <-  format(as.POSIXct(data$end_flight_time, format = "%H:%M:%S"), format = "%H:%M:%S")
+# Conversion des variables "heures" en seconde
+# data$takeoff_time <-  format(as.POSIXct(data$takeoff_time, format = "%H:%M:%S"), format = "%H:%M:%S")
+# data$end_flight_time <-  format(as.POSIXct(data$end_flight_time, format = "%H:%M:%S"), format = "%H:%M:%S")
+
+# --- Extraire les heures, les minutes et les secondes
+for (variable_name in c("takeoff_time", "end_flight_time")){
+  
+  data[, variable_name] <- hms(data[, variable_name])
+  heures <- hour(data[, variable_name])
+  minutes <- minute(data[, variable_name])
+  secondes <- second(data[, variable_name])
+  
+  # Convertir les heures, les minutes et les secondes en secondes
+  data[, variable_name] <- heures * 3600 + minutes * 60 + secondes
+}
+
+
 
 # Conversion des variables "facteurs"
 data$wind_flight <- as.factor(data$wind_flight)
 data$sun_flight <- as.factor(data$sun_flight)
-
+data$age_FMR <- as.factor(data$age_FMR)
 
 
 # Identification des données manquantes (en %)
@@ -96,6 +114,13 @@ apply(X = data_factor, MARGIN = 2, function(x){
   i <<- i + 1    
 }
 )
+
+# --- On relevel sun_flight et wind_flight en ajoutant la modalité ("<2")
+data$sun_flight <- ifelse(test = data$sun_flight==1 | data$sun_flight == 2, yes = "<2", no = data$sun_flight)
+data$wind_flight <- ifelse(test = data$wind_flight==1 | data$wind_flight == 2, yes = "<2", no = data$wind_flight)
+data$sun_flight  <- as.factor(data$sun_flight)
+data$wind_flight <- as.factor(data$wind_flight)
+
 
 
 # distribution des covariables
@@ -178,11 +203,61 @@ points(data$y[data$Pgi_331 == "CC"] ~ data$air_T[data$Pgi_331 == "CC"], pch = 20
 
 # Colinéarité des variables x -------------------------------------------------------------
 M <- cor(na.omit(data_num))
-corrplot.mixed(M,upper="square",lower.col="black", tl.col="black",cl.cex = 0.8,tl.cex = 0.7,number.cex =0.8)
+corrplot::corrplot.mixed(M,upper="square",lower.col="black", tl.col="black",cl.cex = 0.8,tl.cex = 0.7,number.cex =0.8)
 
 # Corrélation des variables temporelles
 # cor(na.omit(data$takeoff_time ~ data$end_flight_time))
 
 # --- Suppression des variables corrélées (dew point ou humidity ?)
-data <- data[!colnames(data) %in% c("eclosion_day", "flight_day", "age_flight", "dew_flight", "stop_flight")]
+data <- data[!colnames(data) %in% c("eclosion_day", "flight_day", "age_flight", "dew_flight", "stop_flight", "end_flight_time")]
 
+
+
+
+
+# Modélisation ------------------------------------------------------------
+mod <- lm(formula = y ~., data = na.omit(data))
+anova(mod)
+
+# --- Multicollinéarité avec test VIF
+vif(mod)  #on supprime la variable wind_flight
+mod <-
+  lm(
+    formula = y ~ sex + FMR_day + age_FMR + mass + FMR + sun_flight +
+      air_T + humidity_flight + solar_radiation_flight + flight_duration + disturbed_flight +
+      takeoff_time + takeoff_T_thorax + Pgi_105 + Pgi_1083 + Pgi_331,
+    data = na.omit(data)
+  )
+
+vif(mod)  #on supprime la variable sun_flight
+
+mod <-
+  lm(
+    formula = y ~ sex + FMR_day + age_FMR + mass + FMR  +
+      air_T + humidity_flight + solar_radiation_flight + flight_duration + disturbed_flight +
+      takeoff_time + takeoff_T_thorax + Pgi_105 + Pgi_1083 + Pgi_331,
+    data = na.omit(data)
+  )
+
+vif(mod)  #on supprime la variable wind_flight
+
+
+# --- Selection du meilleur modèle
+mod0 <- lm(formula = y ~ 1, data = na.omit(data))
+selection_model <- step(object = mod, scope = list(mod0, mod), direction = "both")
+selection_model$terms
+
+mod_candidat <- lm(y ~ mass + air_T + flight_duration + disturbed_flight + takeoff_T_thorax, data = na.omit(data))
+anova(mod_candidat)
+summary(mod_candidat)
+
+# --- Evaluations des résidus
+par(mfrow = c(1, 2))
+hist(mod_candidat$residuals, col = "blue", breaks = 20)
+qqnorm(mod_candidat$residuals,pch=16,col='blue',xlab='')
+qqline(mod_candidat$residuals,col='red')
+
+# Distance de cook des résidus
+par(mfrow = c(1, 1))
+plot(cooks.distance(mod_candidat), type = "h", ylim = c(0, 1))
+abline(h = 1, col = 2,lwd = 3)
