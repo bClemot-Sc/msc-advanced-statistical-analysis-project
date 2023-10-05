@@ -141,7 +141,7 @@ apply(X = data_num, MARGIN = 2, function(x){
 
 # --- Visualisation des distribution des y~X
 # Facteurs
-par(mfrow = c(2,4), mar = c(2, 4, 4, .5))
+par(mfrow = c(2,4))
 i <- 1
 apply(X = data_factor, MARGIN = 2, function(x){
   
@@ -257,7 +257,23 @@ hist(mod_candidat$residuals, col = "blue", breaks = 20)
 qqnorm(mod_candidat$residuals,pch=16,col='blue',xlab='')
 qqline(mod_candidat$residuals,col='red')
 
-# Distance de cook des résidus
+# --- Distance de cook des résidus
 par(mfrow = c(1, 1))
 plot(cooks.distance(mod_candidat), type = "h", ylim = c(0, 1))
 abline(h = 1, col = 2,lwd = 3)
+
+# --- Pouvoir explicatif de chaque variable prédictive
+ano_mod <- anova(mod_candidat)
+var_expliquee <- round(ano_mod$`Sum Sq`/ sum(ano_mod$`Sum Sq`), 3)  # Ratio de variance expliquée par variable
+names(var_expliquee) <- rownames(ano_mod)
+
+bar <- barplot(var_expliquee, ylab = "% variance expliquée", ylim = c(0, .5), cex.names = .8, las = 2)
+text(
+  x = bar,
+  y = var_expliquee + .05,
+  labels = paste(var_expliquee * 100, "%"),
+  pos = 1,
+  cex = 1
+)
+
+
