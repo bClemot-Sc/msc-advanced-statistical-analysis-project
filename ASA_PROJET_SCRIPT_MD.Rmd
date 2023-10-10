@@ -20,6 +20,7 @@ library(corrplot)
 library(ade4)
 library(lubridate)  # Convertir données temporelles en secondes
 library(car)  # fonction vif() et anova()
+library(lme4)  # modèle gaussien mixte
 ```
 
 
@@ -35,8 +36,6 @@ data <- read.table(
   dec = ",",
   sep = ""
 )
-
-head(data)
 ```
 
 \
@@ -72,7 +71,7 @@ colnames(data)[1:22] <- c(
   "takeoff_time",
   "takeoff_T_thorax",
   "end_flight_time",
-  "y"
+  "mean_T_flight"
 )
 ```
 
@@ -149,11 +148,11 @@ barplot(sort(data_na), col = couleurs, las = 2)
 abline(h = 30, col = "red")
 ```
 
-On supprime les variables avec plus de 30% de données manquantes et les valeurs NAs de la variable y réponse.
+On supprime les variables avec plus de 30% de données manquantes et les valeurs NAs de la variable mean_T_flight réponse.
 
 ```{r}
 data <- data[, !colnames(data) %in% names(data_na[data_na>30])]
-data <- data[!is.na(data$y),]
+data <- data[!is.na(data$mean_T_flight),]
 ```
 
 
@@ -164,16 +163,31 @@ data <- data[!is.na(data$y),]
 
 
 # VISUALISATION DES DONNEES
-#### --- Visualisation de la variable Y
+Dans cette analyse, on considérera deux variables réponses :
+
+- takeoff_T_thorax : la température au décollage du papillon
+- mean_T_flight : la température moyenne pendant le vol
+
+#### --- Visualisation de la variable takeoff_T_thorax & mean_T_flight
+
 ```{r, echo = F}
-par(mfrow = c(1,3))
-hist(data$y, pch = 16, col = 'blue', xlab = "Mean temperature", main = "")
-dotchart(data$y, pch = 16, col = 'blue')
-qqnorm(data$y, pch = 16, col = 'blue')
-qqline(data$y, col = 'red')
+par(mfrow = c(2,3))
+# Température au décollage
+hist(data$takeoff_T_thorax, pch = 16, col = 'blue', xlab = "Mean temperature", main = "")
+dotchart(data$takeoff_T_thorax, pch = 16, col = 'blue')
+qqnorm(data$takeoff_T_thorax, pch = 16, col = 'blue')
+qqline(data$takeoff_T_thorax, col = 'red')
+
+# Température moyenne au vol
+hist(data$mean_T_flight, pch = 16, col = 'blue', xlab = "Mean temperature", main = "")
+dotchart(data$mean_T_flight, pch = 16, col = 'blue')
+qqnorm(data$mean_T_flight, pch = 16, col = 'blue')
+qqline(data$mean_T_flight, col = 'red')
 ```
 
+Les deux variables réponses suivent une loi normale. Pas d'outlier détecté.
 \
+
 
 
 #### --- Visualisation des distribution des X
@@ -251,12 +265,34 @@ visu <- apply(X = data_num, MARGIN = 2, function(x){
   i <<- i + 1    
 }
 )
+
+```
+
+On log transorme les variables suivantes pour 'normaliser' la distribution :
+
+- Eclosion day 
+- FMR_day
+- mass 
+- flight_day
+- humidity
+- flight_duration
+- takeoff_time
+
+
+```{r}
+data$eclosion_day <- log(data$eclosion_day)
+data$mass <- log(data$mass)
+data$FMR_day <- log(data$FMR_day)
+data$flight_day <- log(data$flight_day)
+data$humidity_flight <- log(data$humidity_flight)
+data$flight_duration <- log(data$flight_duration)
+data$takeoff_time <- log(data$takeoff_time)
 ```
 
 \
 
 
-### --- Visualisation des distribution des y~X
+### --- Visualisation des distribution des mean_T_flight ~ X
 **Facteurs**
 ```{r, echo = F}
 par(mfrow = c(2,4))
@@ -264,13 +300,13 @@ i <- 1
 visu <- apply(X = data_factor, MARGIN = 2, function(x){
   
   boxplot(
-    data$y ~ x,
-    ylab = "Y",
+    data$mean_T_flight ~ x,
+    ylab = "mean_T_flight",
     xlab = "",
     main = colnames(data_factor)[i], 
     ylim = c(
-      min(data$y, na.rm = T) - 1,
-      max(data$y  + 1, na.rm = T)
+      min(data$mean_T_flight, na.rm = T) - 1,
+      max(data$mean_T_flight  + 1, na.rm = T)
     )
   )
   i <<- i + 1    
@@ -280,23 +316,23 @@ visu <- apply(X = data_factor, MARGIN = 2, function(x){
 
 
 
-*Covariables**
+**Covariables**
 ```{r, echo = F}
-par(mfrow = c(2,2))
+par(mfrow = c(1,2))
 i <- 1
-visu <- apply(X = data_num, MARGIN = 2, function(x){
+visu <- apply(X = data_num[! colnames(data_num) %in% "mean_T_flight"], MARGIN = 2, function(x){
   
   plot(
-    data$y  ~ x,
+    data$mean_T_flight  ~ x,
     ylab = "T",
     xlab = "",
     main = colnames(data_num)[i],
     ylim = c(
-      min(data$y, na.rm = T) - 1,
-      max(data$y  + 1, na.rm = T)
+      min(data$mean_T_flight, na.rm = T) - 1,
+      max(data$mean_T_flight  + 1, na.rm = T)
     )
   )
-  abline(lm(data$y  ~ x), col = "red")
+  abline(lm(data$mean_T_flight  ~ x), col = "red")
   
   i <<- i + 1    
 }
@@ -307,26 +343,238 @@ visu <- apply(X = data_num, MARGIN = 2, function(x){
 
 \
 
-### --- Interaction température de l'air et SNP331 (ref : bibliographie)
-**Interactions between Latitude & Location**
+# INTERACTIONS ENTRE y ~ FACTEURS / CO-VARIABLES
+
+## A) Gène * environnement
+### --- température de l'air et SNP331 (ref : bibliographie)
 ```{r, echo = F}
-par(mfrow = c(1,1))
+# par(mfrow = c(1,2))
+# plot(
+#   data$mean_T_flight ~ data$air_T,
+#   ylim = c(
+#     min(data$mean_T_flight, na.rm = T) - 1,
+#     max(data$mean_T_flight  + 1, na.rm = T)), ylab = "y", xlab = "Air"
+#   )
+# points(data$mean_T_flight[data$Pgi_331 == "AA"] ~ data$air_T[data$Pgi_331 == "AA"], pch = 20, cex = 2, col = "red")
+# points(data$mean_T_flight[data$Pgi_331 == "CA"] ~ data$air_T[data$Pgi_331 == "CA"], pch = 20, cex = 2, col = "blue")
+# points(data$mean_T_flight[data$Pgi_331 == "CC"] ~ data$air_T[data$Pgi_331 == "CC"], pch = 20, cex = 2, col = "green")
+
+
+
 plot(
-  data$y ~ data$air_T,
+  data$takeoff_T_thorax ~ data$air_T,
   ylim = c(
-    min(data$y, na.rm = T) - 1,
-    max(data$y  + 1, na.rm = T)
+    min(data$takeoff_T_thorax, na.rm = T) - 1,
+    max(data$takeoff_T_thorax  + 1, na.rm = T)), ylab = "y", xlab = "Air"
   )
-)
-points(data$y[data$Pgi_331 == "AA"] ~ data$air_T[data$Pgi_331 == "AA"], pch = 20, cex = 2, col = "red")
-points(data$y[data$Pgi_331 == "CA"] ~ data$air_T[data$Pgi_331 == "CA"], pch = 20, cex = 2, col = "blue")
-points(data$y[data$Pgi_331 == "CC"] ~ data$air_T[data$Pgi_331 == "CC"], pch = 20, cex = 2, col = "green")
+points(data$takeoff_T_thorax[data$Pgi_331 == "AA"] ~ data$air_T[data$Pgi_331 == "AA"], pch = 20, cex = 2, col = "red")
+points(data$takeoff_T_thorax[data$Pgi_331 == "CA"] ~ data$air_T[data$Pgi_331 == "CA"], pch = 20, cex = 2, col = "blue")
+points(data$takeoff_T_thorax[data$Pgi_331 == "CC"] ~ data$air_T[data$Pgi_331 == "CC"], pch = 20, cex = 2, col = "green")
 ```
 
-On observe pas de pattern clair d'interaction (tous les groupes [couleurs] de pointsse chevauchent).
+On observe pas de pattern clair d'interaction entre la température de l'air et le SNP331 (tous les groupes [couleurs] de pointsse chevauchent) sur la température du vol.
 
 \
+
+## B) Sexe * variables physiologiques et comportementales
+### --- y ~ Masse*sexe
+```{r, echo = F}
+# par(mfrow = c(1,2))
+# plot(
+#   data$takeoff_T_thorax ~ data$mass,
+#   ylim = c(
+#     min(data$takeoff_T_thorax, na.rm = T) - 1,
+#     max(data$takeoff_T_thorax  + 1, na.rm = T)
+#   ), main = "y = t° décollage", ylab = "y", xlab = "Masse"
+# )
+# points(data$takeoff_T_thorax[data$sex == "FEMALE"] ~ data$mass[data$sex == "FEMALE"], pch = 20, cex = 2, col = "red")
+# points(data$takeoff_T_thorax[data$sex == "MALE"] ~ data$mass[data$sex == "MALE"], pch = 20, cex = 2, col = "blue")
+
+
+
+plot(
+  data$mean_T_flight ~ data$mass,
+  ylim = c(
+    min(data$mean_T_flight, na.rm = T) - 1,
+    max(data$mean_T_flight  + 1, na.rm = T)
+  ), main = "y = t° moyenne", ylab = "y", xlab = "Masse"
+)
+points(data$mean_T_flight[data$sex == "FEMALE"] ~ data$mass[data$sex == "FEMALE"], pch = 20, cex = 2, col = "red")
+points(data$mean_T_flight[data$sex == "MALE"] ~ data$mass[data$sex == "MALE"], pch = 20, cex = 2, col = "blue")
+
+```
+Les femelles sont nettement plus lourdes que les mâles ! **Forte intéraction sexe x masse** sur la température du corps au décollage et la température moyenne du corps pendant le vol.
+
 \
+
+### --- y ~ sexe*FMR
+```{r, echo = F}
+# par(mfrow = c(1,2))
+# plot(
+#   data$takeoff_T_thorax ~ data$FMR,
+#   ylim = c(
+#     min(data$takeoff_T_thorax, na.rm = T) - 1,
+#     max(data$takeoff_T_thorax  + 1, na.rm = T)
+#   ), main = "y = t° décollage", ylab = "y", xlab = "FMR"
+# )
+# points(data$takeoff_T_thorax[data$sex == "FEMALE"] ~ data$FMR[data$sex == "FEMALE"], pch = 20, cex = 2, col = "red")
+# points(data$takeoff_T_thorax[data$sex == "MALE"] ~ data$FMR[data$sex == "MALE"], pch = 20, cex = 2, col = "blue")
+
+
+
+plot(
+  data$mean_T_flight ~ data$FMR,
+  ylim = c(
+    min(data$mean_T_flight, na.rm = T) - 1,
+    max(data$mean_T_flight  + 1, na.rm = T)
+  ), main = "y = t° moyenne", ylab = "y", xlab = "FMR"
+)
+points(data$mean_T_flight[data$sex == "FEMALE"] ~ data$FMR[data$sex == "FEMALE"], pch = 20, cex = 2, col = "red")
+points(data$mean_T_flight[data$sex == "MALE"] ~ data$FMR[data$sex == "MALE"], pch = 20, cex = 2, col = "blue")
+
+```
+
+\
+
+### --- y ~ sexe*flight_duration
+```{r, echo = F}
+# par(mfrow = c(1,2))
+# plot(
+#   data$takeoff_T_thorax ~ data$flight_duration,
+#   ylim = c(
+#     min(data$takeoff_T_thorax, na.rm = T) - 1,
+#     max(data$takeoff_T_thorax  + 1, na.rm = T)
+#   ), main = "y = t° décollage", ylab = "y", xlab = "Durée de vol"
+# )
+# points(data$takeoff_T_thorax[data$sex == "FEMALE"] ~ data$flight_duration[data$sex == "FEMALE"], pch = 20, cex = 2, col = "red")
+# points(data$takeoff_T_thorax[data$sex == "MALE"] ~ data$flight_duration[data$sex == "MALE"], pch = 20, cex = 2, col = "blue")
+# 
+
+
+plot(
+  data$mean_T_flight ~ data$flight_duration,
+  ylim = c(
+    min(data$mean_T_flight, na.rm = T) - 1,
+    max(data$mean_T_flight  + 1, na.rm = T)
+  ), main = "y = t° moyenne", ylab = "y", xlab = "Durée de vol",
+)
+points(data$mean_T_flight[data$sex == "FEMALE"] ~ data$flight_duration[data$sex == "FEMALE"], pch = 20, cex = 2, col = "red")
+points(data$mean_T_flight[data$sex == "MALE"] ~ data$flight_duration[data$sex == "MALE"], pch = 20, cex = 2, col = "blue")
+
+```
+Il semble y avoir une faible interaction entre le sexe et la durée du vol.
+
+
+\
+
+
+On observe aucune interaction entre durée du vol et sexe (simplement un effet du sexe).
+
+### --- y ~ sexe*température au décollage
+```{r, echo = F}
+plot(
+  data$mean_T_flight ~ data$takeoff_T_thorax,
+  ylim = c(
+    min(data$mean_T_flight, na.rm = T) - 1,
+    max(data$mean_T_flight  + 1, na.rm = T)
+  ), main = "y = t° moyenne", ylab = "y", xlab = "Température au décollage",
+)
+points(data$mean_T_flight[data$sex == "FEMALE"] ~ data$takeoff_T_thorax[data$sex == "FEMALE"], pch = 20, cex = 2, col = "red")
+points(data$mean_T_flight[data$sex == "MALE"] ~ data$takeoff_T_thorax[data$sex == "MALE"], pch = 20, cex = 2, col = "blue")
+
+```
+Pas d'interaction visible entre la température au décollage et le sexe.
+
+\
+
+### --- y ~ sexe*SNP331
+```{r, echo = F}
+# par(mfrow = c(1,2))
+
+# boxplot(
+#   data$takeoff_T_thorax ~ data$sex*data$Pgi_331,
+#   col = c(rep("red", 3), rep("blue", 3)),
+#   ylim = c(
+#     min(data$takeoff_T_thorax, na.rm = T) - 1,
+#     max(data$takeoff_T_thorax  + 1, na.rm = T)
+#   ), main = "y = t° décollage", ylab = "y", xlab = "SNP 331"
+# )
+
+
+boxplot(
+  data$mean_T_flight ~ data$sex*data$Pgi_331,
+  col = c(rep("red", 3), rep("blue", 3)),
+  ylim = c(
+    min(data$takeoff_T_thorax, na.rm = T) - 1,
+    max(data$takeoff_T_thorax  + 1, na.rm = T)
+  ), main = "y = t° moyenne", ylab = "y", xlab = "SNP 331"
+)
+
+```
+
+\
+
+### --- y ~ sexe*SNP105
+
+```{r, echo = F}
+# par(mfrow = c(1,2))
+
+# boxplot(
+#   data$takeoff_T_thorax ~ data$sex*data$Pgi_105,
+#   col = c(rep("red", 3), rep("blue", 3)),
+#   ylim = c(
+#     min(data$takeoff_T_thorax, na.rm = T) - 1,
+#     max(data$takeoff_T_thorax  + 1, na.rm = T)
+#   ), main = "y = t° décollage", ylab = "y", xlab = "SNP 105"
+# )
+
+
+boxplot(
+  data$mean_T_flight ~ data$sex*data$Pgi_105,
+  col = c(rep("red", 3), rep("blue", 3)),
+  ylim = c(
+    min(data$takeoff_T_thorax, na.rm = T) - 1,
+    max(data$takeoff_T_thorax  + 1, na.rm = T)
+  ), main = "y = t° moyenne", ylab = "y", xlab = "SNP 105"
+)
+```
+
+\
+
+### --- y ~ sexe*SNP1083
+
+```{r, echo = F}
+# par(mfrow = c(1,2))
+
+# boxplot(
+#   data$takeoff_T_thorax ~ data$sex*data$Pgi_1083,
+#   col = c(rep("red", 3), rep("blue", 3)),
+#   ylim = c(
+#     min(data$takeoff_T_thorax, na.rm = T) - 1,
+#     max(data$takeoff_T_thorax  + 1, na.rm = T)
+#   ), main = "y = t° décollage", ylab = "y", xlab = "SNP 1083"
+# )
+
+
+boxplot(
+  data$mean_T_flight ~ data$sex*data$Pgi_1083,
+  col = c(rep("red", 3), rep("blue", 3)),
+  ylim = c(
+    min(data$takeoff_T_thorax, na.rm = T) - 1,
+    max(data$takeoff_T_thorax  + 1, na.rm = T)
+  ), main = "y = t° moyenne", ylab = "y", xlab = "SNP 1083"
+)
+```
+
+On observe de claires interactions entre les variables génétiques et le sexe du papillon sur la température du corps.
+
+\
+
+**Au vu des nombreuses interactions entre variables prédictives et sexes, nous avons décidé de mener les analyses en séparant les mâles et les femelles**.
+
+\
+
+
 
 # COLINEARITE
 ```{r, fig.width=8, fig.height=8, fig.show='asis'}
@@ -365,137 +613,149 @@ data <- data[!colnames(data) %in% c("eclosion_day", "flight_day", "age_flight", 
 \
 
 # MODELISATION
+
+## A) y = température moyenne au vol SANS EFFET ALEATOIRES
+
 ```{r}
-mod <- lm(formula = y ~., data = na.omit(data))
+mod <- lm(formula = mean_T_flight ~  FMR_day + age_FMR + FMR + sun_flight +
+      air_T + humidity_flight + solar_radiation_flight + flight_duration + disturbed_flight +
+       takeoff_T_thorax + (takeoff_time + mass + Pgi_105 + Pgi_1083 + Pgi_331)*sex,
+      data = data)
 ```
 
 
-
-### --- Multicollinéarité avec test VIF  
+### --- Multicollinéarité avec test VIF 
 On choisit un seuil entre >=5 pour le score VIF.
 
 **à la main**
 ```{r}
-vif(mod)  # on supprime la variable wind_flight
+coli <- vif(mod, type = 'predictor')  # on supprime la variable wind_flight
+coli[coli$GVIF == max(coli$GVIF),]["GVIF"]  # identification du plus grand vif
 ```
 \
 
-On supprime la variable 'wind_flight' [VIF = 34.8]
+On supprime la variable 'pgi_105' 
+
 ```{r}
-mod <-
-  lm(
-    formula = y ~ sex + FMR_day + age_FMR + mass + FMR + sun_flight +
+mod <- lm(formula = mean_T_flight ~  FMR_day + age_FMR + FMR + sun_flight +
       air_T + humidity_flight + solar_radiation_flight + flight_duration + disturbed_flight +
-      takeoff_time + takeoff_T_thorax + Pgi_105 + Pgi_1083 + Pgi_331,
-    data = na.omit(data)
-  )
+       takeoff_T_thorax + (takeoff_time + mass + Pgi_1083 + Pgi_331)*sex,
+      data = data)
 
-vif(mod)
+coli <- vif(mod, type = 'predictor')
+
+coli[coli$GVIF == max(coli$GVIF),]["GVIF"]
 ```
 \
 
-On supprime la variable 'sun_flight' [VIF = 12.7]
+On supprime la variable 'Pgi_1083' 
 ```{r}
-mod <-
-  lm(
-    formula = y ~ sex + FMR_day + age_FMR + mass + FMR  +
+mod <- lm(formula = mean_T_flight ~  FMR_day + age_FMR + FMR + sun_flight +
       air_T + humidity_flight + solar_radiation_flight + flight_duration + disturbed_flight +
-      takeoff_time + takeoff_T_thorax + Pgi_105 + Pgi_1083 + Pgi_331,
-    data = na.omit(data)
-  )
+       takeoff_T_thorax + (takeoff_time + mass + Pgi_331)*sex,
+      data = data)
 
-vif(mod)
+coli <- vif(mod, type = 'predictor')
+
+coli[coli$GVIF == max(coli$GVIF),]["GVIF"]
 
 ```
 \
 
-On supprime la variable 'mass' [VIF = 7.6]
+On supprime la variable 'Pgi_331' 
 ```{r}
-mod <-
-  lm(
-    formula = y ~ sex + FMR_day + age_FMR + FMR  +
+mod <- lm(formula = mean_T_flight ~  FMR_day + age_FMR + FMR + sun_flight +
       air_T + humidity_flight + solar_radiation_flight + flight_duration + disturbed_flight +
-      takeoff_time + takeoff_T_thorax + Pgi_105 + Pgi_1083 + Pgi_331,
-    data = na.omit(data)
-  )
+       takeoff_T_thorax + (takeoff_time + mass)*sex,
+      data = data)
 
-vif(mod)
+coli <- vif(mod, type = 'predictor')
+
+coli[coli$GVIF == max(coli$GVIF),]["GVIF"]
 
 ```
 
 \
 
-On supprime la variable 'FMR_day' [VIF = 5.3]
-
+On supprime la variable 'Mass' 
 ```{r}
-vif(mod)  # suppression variable 'FMR_day'
-
-mod <-
-  lm(
-    formula = y ~ sex + age_FMR + FMR  +
+mod <- lm(formula = mean_T_flight ~  FMR_day + age_FMR + FMR + sun_flight +
       air_T + humidity_flight + solar_radiation_flight + flight_duration + disturbed_flight +
-      takeoff_time + takeoff_T_thorax + Pgi_105 + Pgi_1083 + Pgi_331,
-    data = na.omit(data)
-  )
+       takeoff_T_thorax + (takeoff_time)*sex,
+      data = data)
+
+coli <- vif(mod, type = 'predictor')
+
+coli[coli$GVIF == max(coli$GVIF),]["GVIF"]
 
 ```
 \
 
+\
+
+On supprime la variable 'takeoff_time' 
 ```{r}
-vif(mod) 
+mod <- lm(formula = mean_T_flight ~  FMR_day + age_FMR + FMR + sun_flight +
+      air_T + humidity_flight + solar_radiation_flight + flight_duration + disturbed_flight +
+       takeoff_T_thorax + sex,
+      data = data)
+
+coli <- vif(mod, type = 'predictor')
+
+coli[coli$GVIF == max(coli$GVIF),]["GVIF"]
 ```
 La colinéarité a été contrôlée !
+
 
 \
 
 ### --- Selection du meilleur modèle  
 On sélectionne le meilleur modèle avec une procédure backward / forward basé sur l'AIC.
 ```{r, results = 'hide', message = F}
-mod0 <- lm(formula = y ~ 1, data = na.omit(data))
+# On teste l'ensemble des interactions possibles variables (morphologiques + génétiques)*sex
+initial_formula <- formula(mod)
 
-mod_candidat <- step(
-       object = mod,
-       scope = list(mod0, mod),  # Born = [modèle NULL ; modèle complet]
-       direction = "both"        # Procédure backward ET forward
-       )
+# Ajuster un modèle linéaire initial avec la formule initiale
+initial_model <- lm(initial_formula, data = data)
 
+# Utiliser step() pour sélectionner les termes du modèle
+final_model <- step(initial_model, direction = "both", trace = FALSE, k = 3)
+
+# Afficher le modèle final
+summary(final_model)
 ```
 
 ```{r}
-Anova(mod_candidat, type = "III")
+Anova(final_model, type = "III")
 ```
-
-La variable 'pgi_105' n'est pas significative. On la supprime.  
-
-\
+Tous les effets sont significatifs, c'est notre modèle candidat !
 
 ```{r}
-mod_candidat <- lm(formula = y ~ air_T + flight_duration + disturbed_flight + takeoff_T_thorax, data = data)
-Anova(mod_candidat, type = "III")
+mod_candidat <- final_model
 summary(mod_candidat)
 ```
 
-Le **modèle candidat final** est donc y ~ air_T + flight_duration + disturbed_flight + takeoff_T_thorax. Avant de l'interpréter on évalue la qualité du modèle.
+Le **modèle candidat final** est donc le modèle ci-dessus. Avant de l'interpréter on évalue la qualité du modèle.
 
 \
 
 ### --- Evaluations des résidus
 ```{r}
-par(mfrow = c(1, 2))
+par(mfrow = c(1, 3))
 hist(mod_candidat$residuals, col = "blue", breaks = 20)
 qqnorm(mod_candidat$residuals,pch=16,col='blue',xlab='')
 qqline(mod_candidat$residuals,col='red')
-```
 
-Les résidus sont distribués normalement, et aucun pattern ne semble émergé.
-\
 
-### --- Distance de cook des résidus
-```{r}
-par(mfrow = c(1, 1))
+# Cooks
 plot(cooks.distance(mod_candidat), type = "h", ylim = c(0, 1))
 abline(h = 1, col = 2,lwd = 3)
+
 ```
+
+Les résidus sont distribués normalement, et aucun pattern ne semble émergé. Le graphique de Cooks ne montre la présence d'aucun poids aberrant parmi les résidus. Le modèle est donc interprétable !
+
+\
 
 
 \
@@ -518,12 +778,79 @@ text(
 
 \
 
-# MODELE FINAL
+# MODELE FINAL A REFAIRE QUAND VALIDATION FINALE
 **Le modèle est donc validée. La température moyenne du corps pendant le vol s'exprime par l'équation suivante :**
 
 
-$$
-mean\_T\_flight = 1.66 + 0.76 \cdot Air\_T - 0.12 \cdot flight\_duration + 1.54 \cdot disturbed\_flight[==YES] + 0.56 \cdot takeoff\_T\_thorax
-$$
 
+```{r, echo = F}
+# Ecriture automatique du modèle
+coeff <- round(mod_candidat$coefficients, 2)  # Extraction coefficients
+vp_names <- colnames(mod_candidat$model)  # Extraction VP
+vp_transfo <- c("eclosion_day", "mass", "FMR_day", "flight_day", "humidity_flight", "flight_duration", "takeoff_time")
+
+                # data$eclosion_day <- log(data$eclosion_day)
+# data$mass <- log(data$mass)
+# data$FMR_day <- log(data$FMR_day)
+# data$flight_day <- log(data$flight_day)
+# data$humidity_flight <- log(data$humidity_flight)
+# data$flight_duration <- log(data$flight_duration)
+# data$takeoff_time <- log(data$takeoff_time)
+
+
+mod_equation <- paste0("Y = ", coeff[1], " + ")
+
+for(i in 2:length(vp_names)){
+  
+  if(vp_names[i] %in% vp_transfo){  # Si VP transformé en log, alors mettre en exponentielle
+      mod_equation <- paste0(mod_equation,  coeff[i], "*", "exp(", vp_names[i], ") + ")
+      next
+  
+  }
+  
+  if(i == length(vp_names)){  # Si fin de boucle, ne pas mettre de "+" à la fin de l'équation
+      mod_equation <- paste0(mod_equation, coeff[i], "*", vp_names[i])
+      break
+  }
+  
+  mod_equation <- paste0(mod_equation, coeff[i], "*", vp_names[i], " + ")
+}
+
+mod_equation
+```
+
+
+
+\
+\
+
+
+## B) y = température moyenne au vol AVEC EFFET ALEATOIRES
+```{r}
+data$FMR_day <- as.factor(data$FMR_day)
+
+mod_candidat <- lmer(mean_T_flight ~ air_T + flight_duration + disturbed_flight + 
+    takeoff_T_thorax + (1|FMR_day) + (1|age_FMR), data = data)
+
+summary(mod_candidat)
+Anova(mod_candidat, type = "III")
+```
+
+Le **modèle candidat final** est donc le modèle ci-dessus. Avant de l'interpréter on évalue la qualité du modèle.
+
+\
+
+### --- Evaluations des résidus
+```{r}
+par(mfrow = c(1, 3))
+hist(residuals(mod_candidat), col = "blue", breaks = 20)
+qqnorm(residuals(mod_candidat),pch=16,col='blue',xlab='')
+qqline(residuals(mod_candidat),col='red')
+
+
+# Cooks
+plot(cooks.distance(mod_candidat), type = "h", ylim = c(0, 1))
+abline(h = 1, col = 2,lwd = 3)
+
+```
 
