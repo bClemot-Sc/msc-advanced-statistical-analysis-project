@@ -70,6 +70,6 @@ imputed_data <- imputeFAMD(data)
 # Recuperation du df avec les NAs imputes
 data <- imputed_data$completeObs
 # Re-visualisation des NAs
-data_na <- apply(X = new_df, MARGIN = 2, FUN = function(x) round(sum(is.na(x)) / nrow(data) * 100, 2))
+data_na <- apply(X = data, MARGIN = 2, FUN = function(x) round(sum(is.na(x)) / nrow(data) * 100, 2))
 sort(data_na)
 
