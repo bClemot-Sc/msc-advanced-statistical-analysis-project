@@ -1,5 +1,6 @@
 #### Script pour imputer les NAs avec le package missMDA #####
 library(missMDA)
+library(lubridate)
 
 
 # Importation et preparation des donnees -------------------------------------------------
@@ -58,18 +59,17 @@ data$age_FMR <- as.factor(data$age_FMR)
 
 
 # Rappel des variables avec NAs -------------------------------------------
+# Calcule des % de NAs
 data_na <- apply(X = data, MARGIN = 2, FUN = function(x) round(sum(is.na(x)) / nrow(data) * 100, 2))
 sort(data_na)
 
 
-
 # Imputation avec FAMD --------------------------
+# Application de la fonction
 imputed_data <- imputeFAMD(data)
-new_df <- imputed_data$completeObs
-new_data_na <- apply(X = new_df, MARGIN = 2, FUN = function(x) round(sum(is.na(x)) / nrow(data) * 100, 2))
-sort(new_data_na)
-
-  
-  
-
+# Recuperation du df avec les NAs imputes
+data <- imputed_data$completeObs
+# Re-visualisation des NAs
+data_na <- apply(X = new_df, MARGIN = 2, FUN = function(x) round(sum(is.na(x)) / nrow(data) * 100, 2))
+sort(data_na)
 
