@@ -177,7 +177,8 @@ par(mfrow = c(2, 4))
 i <- 1
 visu <- apply(X = data_factor, MARGIN = 2,
       function(x) {
-        bar <- barplot(table(x),main = colnames(data_factor)[i], cex.main = .8)
+        bar <- barplot(table(x),main = colnames(data_factor)[i], cex.main = .8,
+                       ylim = c(0,max(table(x)) + 20))
         text(
           x = bar,
           y = table(x) - 1,
@@ -188,6 +189,7 @@ visu <- apply(X = data_factor, MARGIN = 2,
         i <<- i + 1
       }
 )
+?table
 ```
 
 Les variables sun_flight et wind_flight ont une modalité ("1") avec respectivement, 1 et 2 réplicats. Ces modalités sont alors inutilisables. On créé donc une autre modalité : "\<2".
@@ -324,7 +326,7 @@ plot(
   data$mean_T_flight ~ data$air_T,
   ylim = c(
     min(data$mean_T_flight, na.rm = T) - 1,
-    max(data$mean_T_flight  + 1, na.rm = T)), ylab = "y = T° moyenne", xlab = "Air"
+    max(data$mean_T_flight  + 1, na.rm = T)), ylab = "y = T° moyenne", xlab = "T Air"
     , main = "y ~ T air / SNP331"
   )
 points(data$mean_T_flight[data$Pgi_331 == "AA"] ~ data$air_T[data$Pgi_331 == "AA"], pch = 20, cex = 2, col = "red")
@@ -421,53 +423,57 @@ Pas d'interaction visible entre la température au décollage et le sexe.
 
 ```{r, echo = F}
 boxplot(
-  data$mean_T_flight ~ data$sex*data$Pgi_331,
+  data$mean_T_flight ~ interaction(data$sex,data$Pgi_331, lex.order = T),
   main = "y ~ Sexe / SNP331",
   ylim = c(
     min(data$takeoff_T_thorax, na.rm = T) - 1,
     max(data$takeoff_T_thorax  + 1, na.rm = T)
   ), ylab = "y = T° moyenne", xlab = "SNP 331",
-  names = c("F.AA","M.AA","F.CA","M.CA","F.CC","M.CC"),
+  names = c("AA","CA","CC","AA","CA","CC"),
   col = c(rep("red", 3), rep("blue", 3)),
   cex.names = .6
 )
+legend("topleft",legend=c("Femelles","Males"),col=c("red","blue"),pch=20,pt.cex=2)
+
 ```
+Pas d'interaction.
 
 ### --- y \~ sexe\*SNP105
 
 ```{r, echo = F}
 boxplot(
-  data$mean_T_flight ~ data$sex*data$Pgi_105,
+  data$mean_T_flight ~ interaction(data$sex,data$Pgi_105, lex.order = T),
   main = "y ~ Sexe / SNP105",
   ylim = c(
     min(data$takeoff_T_thorax, na.rm = T) - 1,
     max(data$takeoff_T_thorax  + 1, na.rm = T)
   ), ylab = "y = T° moyenne", xlab = "SNP 105",
-  names = c("F.AA","M.AA","F.TA","M.TA","F.TT","M.TT"),
+  names = c("AA","TA","TT","AA","TA","TT"),
   col = c(rep("red", 3), rep("blue", 3)),
   cex.names = .6
 )
+legend("topleft",legend=c("Femelles","Males"),col=c("red","blue"),pch=20,pt.cex=2)
 ```
+
 
 ### --- y \~ sexe\*SNP1083
 
 ```{r, echo = F}
 boxplot(
-  data$mean_T_flight ~ data$sex*data$Pgi_1083,
+  data$mean_T_flight ~ interaction(data$sex,data$Pgi_1083, lex.order = T),
     main = "y ~ Sexe / Pgi_1083",
   ylim = c(
     min(data$takeoff_T_thorax, na.rm = T) - 1,
     max(data$takeoff_T_thorax  + 1, na.rm = T)
   ), ylab = "y = T° moyenne", xlab = "SNP 1083",
-  names = c("F.AA","M.AA","F.AG","M.AG","F.GG","M.GG"),
+  names = c("AA","AG","GG","AA","AG","GG"),
   col = c(rep("red", 3), rep("blue", 3)),
   cex.names = .6
 )
+legend("topleft",legend=c("Femelles","Males"),col=c("red","blue"),pch=20,pt.cex=2)
 ```
 
-On observe de claires interactions entre les variables génétiques et le sexe du papillon sur la température du corps.\
-
-**Au vu des nombreuses interactions entre variables prédictives et sexes, nous avons décidé de mener les analyses en séparant les mâles et les femelles**.
+Aucune interaction claire entre le sexe et les variables génétiques.
 
 # COLINEARITE
 
