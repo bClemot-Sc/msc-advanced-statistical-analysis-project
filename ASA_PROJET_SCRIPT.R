@@ -7,10 +7,6 @@ library(ade4)
 library(lubridate)  # Convertir données temporelles en secondes
 library(car)  # fonction vif() et anova()
 
-
-# Define WD
-setwd("C:/Users/p_a_8/OneDrive/Bureau/M2 MODE/COURS/Semestre 3/ASA/PROJET")
-
 # Import data
 data <- read.table(
   file = "ASA_data_projet.txt",
