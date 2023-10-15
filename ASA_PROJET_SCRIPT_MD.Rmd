@@ -721,6 +721,17 @@ for(i in 2:length(vp_names)){
 mod_equation
 ```
 
+
+
+
+
+
+
+
+
+
+
+
 ## B) y = température moyenne au vol AVEC EFFET ALEATOIRES
 
 ```{r}
