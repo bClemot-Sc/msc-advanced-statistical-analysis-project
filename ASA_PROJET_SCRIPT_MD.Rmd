@@ -177,7 +177,8 @@ par(mfrow = c(2, 4))
 i <- 1
 visu <- apply(X = data_factor, MARGIN = 2,
       function(x) {
-        bar <- barplot(table(x),main = colnames(data_factor)[i], cex.main = .8)
+        bar <- barplot(table(x),main = colnames(data_factor)[i], cex.main = .8,
+                       ylim = c(0,max(table(x)) + 20))
         text(
           x = bar,
           y = table(x) - 1,
@@ -188,6 +189,7 @@ visu <- apply(X = data_factor, MARGIN = 2,
         i <<- i + 1
       }
 )
+?table
 ```
 
 Les variables sun_flight et wind_flight ont une modalité ("1") avec respectivement, 1 et 2 réplicats. Ces modalités sont alors inutilisables. On créé donc une autre modalité : "\<2".
@@ -324,7 +326,7 @@ plot(
   data$mean_T_flight ~ data$air_T,
   ylim = c(
     min(data$mean_T_flight, na.rm = T) - 1,
-    max(data$mean_T_flight  + 1, na.rm = T)), ylab = "y = T° moyenne", xlab = "Air"
+    max(data$mean_T_flight  + 1, na.rm = T)), ylab = "y = T° moyenne", xlab = "T Air"
     , main = "y ~ T air / SNP331"
   )
 points(data$mean_T_flight[data$Pgi_331 == "AA"] ~ data$air_T[data$Pgi_331 == "AA"], pch = 20, cex = 2, col = "red")
@@ -431,6 +433,7 @@ boxplot(
   col = c(rep("red", 3), rep("blue", 3)),
   cex.names = .6
 )
+legend("topleft",legend=c("Femelles","Males"),col=c("red","blue"),pch=20,pt.cex=2)
 
 ```
 Pas d'interaction.
@@ -449,6 +452,7 @@ boxplot(
   col = c(rep("red", 3), rep("blue", 3)),
   cex.names = .6
 )
+legend("topleft",legend=c("Femelles","Males"),col=c("red","blue"),pch=20,pt.cex=2)
 ```
 
 
@@ -466,6 +470,7 @@ boxplot(
   col = c(rep("red", 3), rep("blue", 3)),
   cex.names = .6
 )
+legend("topleft",legend=c("Femelles","Males"),col=c("red","blue"),pch=20,pt.cex=2)
 ```
 
 Aucune interaction claire entre le sexe et les variables génétiques.
