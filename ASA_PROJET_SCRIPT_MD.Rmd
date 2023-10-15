@@ -140,7 +140,7 @@ abline(h = 30, col = "red", lwd =1.5)
 ```
 
 ### --- Suppression des données manquantes
-
+On supprime les variables ayant plus de 30% de données manquantes.
 ```{r}
 #On supprime les variables avec plus de 30% de données manquantes (NA)
 data <- data[, !colnames(data) %in% names(data_na[data_na>30])]
@@ -274,6 +274,9 @@ data$flight_duration <- log(data$flight_duration)
 data$takeoff_time <- log(data$takeoff_time)
 ```
 
+\
+\
+
 ### --- Visualisation des distribution mean_T_flight \~ X
 
 **Facteurs**
@@ -367,7 +370,7 @@ legend("bottomright", legend = c("Femelles","Males"),
 
 ```
 
-Les femelles sont nettement plus lourdes que les mâles ! **Forte intéraction sexe x masse** sur la température moyenne du corps pendant le vol.
+Les femelles sont nettement plus lourdes que les mâles ! **Intéraction sexe x masse** sur la température moyenne du corps pendant le vol.
 
 ### --- y \~ sexe\*FMR
 
@@ -386,6 +389,9 @@ legend("bottomright", legend=c("Femelles","Males"),
        col = c("red","blue"), pch = 20, pt.cex = 2, cex = 0.8)
 
 ```
+Pas d'interaction visible sexe*FMR sur la température.
+
+\
 
 ### --- y \~ sexe\*flight_duration
 
@@ -405,8 +411,7 @@ legend("topleft", legend =c ("Femelles","Males"),
 
 ```
 
-Il semble y avoir une faible interaction entre le sexe et la durée du vol.\
-On observe aucune interaction entre durée du vol et sexe (simplement un effet du sexe).
+Pas d'interaction visible sexe*durée du vol sur la température.
 
 ### --- y \~ sexe\*température au décollage
 
@@ -425,7 +430,7 @@ legend("topleft",legend=c("Femelles","Males"),col=c("red","blue"),pch=20,pt.cex=
 
 ```
 
-Pas d'interaction visible entre la température au décollage et le sexe.
+Pas d'interaction sexe*température au décollage sur la température pendant le vol.
 
 ### --- y \~ sexe\*SNP331
 
@@ -444,7 +449,6 @@ boxplot(
 legend("topleft",legend=c("Femelles","Males"),col=c("red","blue"),pch=20,pt.cex=2)
 
 ```
-Pas d'interaction.
 
 ### --- y \~ sexe\*SNP105
 
@@ -533,7 +537,7 @@ data <- data[!colnames(data) %in% c("eclosion_day", "flight_day", "age_flight", 
 # MODELISATION
 
 ## A) y = température moyenne au vol SANS EFFET ALEATOIRES
-
+On commence par le modèle "complet" en intégrant toutes les variables interprétables.
 ```{r}
 mod <- lm(formula = mean_T_flight ~  FMR_day + age_FMR + FMR + sun_flight +
       air_T + humidity_flight + solar_radiation_flight + flight_duration + disturbed_flight +
