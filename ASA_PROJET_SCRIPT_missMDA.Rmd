@@ -485,7 +485,7 @@ On observe de claires interactions entre les variables gÃ©nÃ©tiques et le se
 
 **Au vu des nombreuses interactions entre variables prÃ©dictives et sexes, nous avons dÃ©cidÃ© de mener les analyses en sÃ©parant les mÃ¢les et les femelles**.
 
-## C) G�nes Hsp \* G�nes Pgi (bibliographie)
+## C) G?nes Hsp \* G?nes Pgi (bibliographie)
 
 ### --- y \~ Pgi_105\*Hsp
 
@@ -699,7 +699,7 @@ data <- data[!colnames(data) %in% c("eclosion_day", "flight_day", "age_flight", 
 
 # MODELISATION
 
-## A) y = température moyenne au vol SANS EFFET ALEATOIRES
+## y = température moyenne au vol SANS EFFET ALEATOIRES
 
 ```{r}
 mod <- lm(formula = mean_T_flight ~  FMR_day + age_FMR + FMR + sun_flight +
@@ -712,7 +712,7 @@ mod <- lm(formula = mean_T_flight ~  FMR_day + age_FMR + FMR + sun_flight +
       data = data)
 ```
 
-### --- Multicollinéarité avec test VIF
+### --- Multicolinéarité avec test VIF
 
 On choisit un seuil entre \>=5 pour le score VIF.
 
@@ -850,15 +850,25 @@ summary(final_model)
 ```{r}
 Anova(final_model, type = "III")
 ```
-Tous les effets sont significatifs, c'est notre modèle candidat !
+On peut supprimer la variable Hsp70_1_134 car elle ne possède pas de coefficient significatif.
+Voici notre nouveau modèle candidat.
 
 ```{r}
-mod_candidat <- final_model
+mod_candidat <- lm(formula = mean_T_flight ~ air_T + flight_duration + disturbed_flight + 
+    takeoff_T_thorax + TnT2_100, data = data)
 summary(mod_candidat)
 ```
+```{r}
+Anova(mod_candidat, type = "III")
+```
+Le **modèle candidat final** est donc le modèle ci-dessus.
+La variable TnT2_100 n'est plus significative, on peut donc la retirer. 
 
-Le **modèle candidat final** est donc le modèle ci-dessus. Avant de l'interpréter on évalue la qualité du modèle.
-
+```{r}
+mod_candidat <- lm(formula = mean_T_flight ~ air_T + flight_duration + disturbed_flight + 
+    takeoff_T_thorax, data = data)
+summary(mod_candidat)
+```
 Tous les effets sont significatifs, c'est notre modèle candidat !
 
 ### --- Evaluations des résidus
@@ -876,7 +886,7 @@ abline(h = 1, col = 2,lwd = 3)
 
 ```
 
-Les résidus sont distribués normalement, et aucun pattern ne semble émergé. Le graphique de Cooks ne montre la présence d'aucun poids aberrant parmi les résidus. Le modèle est donc interprétable !
+Les résidus sont distribués normalement, et aucun pattern ne semble émerger. Le graphique de Cooks ne montre la présence d'aucun poids aberrant parmi les résidus. Le modèle est donc interprétable !
 
 ### --- Pouvoir explicatif de chaque variable prédictive
 
@@ -898,7 +908,7 @@ text(
 ```
 # MODELE FINAL A REFAIRE QUAND VALIDATION FINALE
 
-**Le modèle est donc validée. La température moyenne du corps pendant le vol s'exprime par l'équation suivante :**
+**Le modèle est donc validé. La température moyenne du corps pendant le vol s'exprime par l'équation suivante :**
 
 ```{r, echo = F}
 # Ecriture automatique du modèle
@@ -936,20 +946,6 @@ for(i in 2:length(vp_names)){
 mod_equation
 ```
 
-## B) y = température moyenne au vol AVEC EFFET ALEATOIRES
-
-```{r}
-data$FMR_day <- as.factor(data$FMR_day)
-
-mod_candidat <- lmer(mean_T_flight ~ air_T + flight_duration + disturbed_flight + 
-    takeoff_T_thorax + Hsp70_1_134 + TnT2_100 + (1|FMR_day) + (1|age_FMR), data = data)
-
-summary(mod_candidat)
-Anova(mod_candidat, type = "III")
-```
-
-Le **modèle candidat final** est donc le modèle ci-dessus. Avant de l'interpréter on évalue la qualité du modèle.
-
 ### --- Evaluations des résidus
 
 ```{r}
@@ -963,4 +959,54 @@ qqline(residuals(mod_candidat),col='red')
 plot(cooks.distance(mod_candidat), type = "h", ylim = c(0, 1), main="Cooks distribuance")
 abline(h = 1, col = 2,lwd = 3)
 
+```
+
+
+# CROSS VALIDATION DU MODELE ----------------------------------------------
+
+On cherche à valider le pouvoir prédictif du modèle candidat avec la méthode de la cross validation en K-fold.
+
+L'intérêt est de générer deux sous tableaux de données de tailles différentes : 'Entraînement' pour générer le modèle à partir ce ces données, et petit tableau 'Test' afin de tester la précision du modèle. Ce processus est effectué K fois et à chaque fois, un score de précision est calculé. 
+Le nombre K est choisi en fonction de la taille du dataset. Par défaut, on choisit K = 10. 
+
+Le résultat est une valeur de précision du modèle retenu (R²), les coefficients de chaque variable et l'errreur associée (RMSE et MAE).
+
+La cross validation est possible grâce aux fonction 'trainControl' et 'train' du package 'caret'. 
+
+```{r}
+library(caret) 
+k<-10 # Valeur par defaut souvent utilisee
+
+# Définir le contrôle de la validation croisée avec preProcess
+ctrl <- trainControl(method = "cv", number = k) 
+# Method = cross validation
+# number = nombre de plis
+# Mettre l'argument "MedianImpute" permet de combler les NAs
+
+# Entraîner le modèle avec train()
+model <- train(mean_T_flight ~ air_T + flight_duration + disturbed_flight + 
+    takeoff_T_thorax + TnT2_100, data = data, 
+               method = "glm", trControl = ctrl, na.action = na.omit) 
+
+# Les NAs sont omis pour avoir le meme modele qu'initialement
+# Cependant, il est possible d'utiliser l'argument 'MedianImpute' dans la fonction trainControl pour générer des valeurs pour les NAs
+
+print(model)
+```
+On obtient une précision de R² = 0.74 pour le modèle candidat.   
+
+
+### Modele final 
+```{r}
+model$finalModel
+```
+
+ Le modele retenu par la validation croisee est 
+mean_T_flight = 3.04 + 0.73 * air_T - 1.49 * flight_duration + 1.53 * disturbed_flight[==YES]+ 0.57 * takeoff_T_thorax
+
+Avec 75 ddl, 71 residus. 
+
+Les predictions pour chaque pli : 
+```{r}
+model$resample
 ```
