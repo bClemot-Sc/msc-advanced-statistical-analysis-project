@@ -137,7 +137,6 @@ couleurs[pos_na_30] <- "red"
 barplot(data_na, ylab="Proportion de NA (%)", main = "Proportion de NA",
         col = couleurs, las = 2, names=colnames(data_na), cex.names = .8)
 abline(h = 30, col = "red", lwd =1.5)
-?barplot
 ```
 
 ### --- Suppression des données manquantes
@@ -189,28 +188,35 @@ visu <- apply(X = data_factor, MARGIN = 2,
         i <<- i + 1
       }
 )
-?table
 ```
 
 Les variables sun_flight et wind_flight ont une modalité ("1") avec respectivement, 1 et 2 réplicats. Ces modalités sont alors inutilisables. On créé donc une autre modalité : "\<2".
 
 ```{r}
 # Reformatage
+# --- Sun_flight
 data$sun_flight <- ifelse(
     test = data$sun_flight == 1 | data$sun_flight == 2,
     yes = "<2",
     no = data$sun_flight
   )
 
+# --- Wind_flight
 data$wind_flight <- ifelse(
     test = data$wind_flight == 1 | data$wind_flight == 2,
     yes = "<2",
     no = data$wind_flight
   )
 
+
 # Conversion en facteur
 data$sun_flight  <- as.factor(data$sun_flight)
 data$wind_flight <- as.factor(data$wind_flight)
+
+# On modifie aussi data_factor
+data_factor$sun_flight <- data$sun_flight
+data_factor$wind_flight <- data$wind_flight
+
 ```
 
 Revisualisation :
@@ -225,7 +231,9 @@ text(x = bar, y = table(data$sun_flight) - 1, label = table(data$sun_flight), po
 # wind_flight
 bar <- barplot(table(data$wind_flight), main = "wind_flight", cex.main = .8, ylim = c(0, 60))
 text(x = bar, y = table(data$wind_flight) - 1, label = table(data$wind_flight), pos = 3)  # Effectifs par catégorie
+
 ```
+
 
 **Covariables**
 
@@ -490,7 +498,7 @@ colnames(data_num_short)[1:14] <- c(
   "dew",
   "humidity",
   "solar",
-  "time_fli",
+  "fl_duration",
   "takeoff_t",
   "takeoff_T°",
   "end_fli"
@@ -503,7 +511,7 @@ corrplot::corrplot.mixed(
   lower.col = "black",
   tl.col = "black",
   cl.cex = 0.8,
-  tl.cex = 0.8,
+  tl.cex = 0.5,
   number.cex = 0.8
 )
 ```
@@ -727,24 +735,126 @@ mod_equation
 
 
 
-
-
-
-
-
 ## B) y = température moyenne au vol AVEC EFFET ALEATOIRES
 
 ```{r}
-data$FMR_day <- as.factor(data$FMR_day)
-
-mod_candidat <- lmer(mean_T_flight ~ air_T + flight_duration + disturbed_flight + 
-    takeoff_T_thorax + (1|FMR_day) + (1|age_FMR), data = data)
-
-summary(mod_candidat)
-Anova(mod_candidat, type = "III")
+# data$FMR_day <- as.factor(data$FMR_day)
 ```
 
-Le **modèle candidat final** est donc le modèle ci-dessus. Avant de l'interpréter on évalue la qualité du modèle.
+```{r}
+mod <- lmer(formula = mean_T_flight ~  + (1|FMR_day) + age_FMR + FMR + sun_flight +
+      air_T + humidity_flight + solar_radiation_flight + flight_duration + disturbed_flight +
+       takeoff_T_thorax + (takeoff_time + mass + Pgi_105 + Pgi_1083 + Pgi_331)*sex,
+      data = data)
+```
+
+### --- Multicollinéarité avec test VIF
+
+On choisit un seuil entre \>=5 pour le score VIF.
+
+**à la main**
+
+```{r}
+coli <- vif(mod, type = 'predictor')  
+coli[,1][coli[,1] == max(coli[,1])]   # identification du plus grand vif
+       
+       
+```
+
+On supprime la variable 'Sex'
+
+```{r}
+mod <- lmer(formula = mean_T_flight ~  + (1|FMR_day) + age_FMR + FMR + sun_flight +
+      air_T + humidity_flight + solar_radiation_flight + flight_duration + disturbed_flight +
+       takeoff_T_thorax + takeoff_time + mass + Pgi_105 + Pgi_1083 + Pgi_331,
+      data = data)
+
+coli <- vif(mod, type = 'predictor')  
+coli[,1][coli[,1] == max(coli[,1])]   # identification du plus grand vif
+```
+
+On supprime la variable 'sun_flight'
+
+```{r}
+mod <- lmer(formula = mean_T_flight ~  + (1|FMR_day) + age_FMR + FMR +
+      air_T + humidity_flight + solar_radiation_flight + flight_duration + disturbed_flight +
+       takeoff_T_thorax + takeoff_time + mass + Pgi_105 + Pgi_1083 + Pgi_331,
+      data = data)
+
+coli <- vif(mod, type = 'predictor')  
+coli[,1][coli[,1] == max(coli[,1])]   # identification du plus grand vif
+
+```
+
+
+La colinéarité a été contrôlée !
+
+### --- Selection du meilleur modèle
+
+On sélectionne le meilleur modèle avec une procédure backward / forward basé sur l'AIC.
+
+```{r message=FALSE, warning=FALSE, results='hide'}
+# On teste l'ensemble des interactions possibles variables (morphologiques + génétiques)*sex
+initial_formula <- formula(mod)
+
+# Ajuster un modèle linéaire initial avec la formule initiale
+initial_model <- lmer(initial_formula, data = na.omit(data))
+
+# Selection
+drop1(initial_model, test = "Chisq")
+
+
+# On supprime age_FMR
+new_formula <- update(initial_formula, . ~ . - age_FMR)  # Sélectionne toutes les variables sauf age_FMR
+drop1(lmer(new_formula, data = na.omit(data)), test = "Chisq")
+
+
+# On supprime solar_radiation_flight
+new_formula <- update(new_formula, . ~ . - solar_radiation_flight)  # Sélectionne toutes les variables sauf age_FMR
+drop1(lmer(new_formula, data = na.omit(data)), test = "Chisq")
+
+# On supprime humidity_flight
+new_formula <- update(new_formula, . ~ . - humidity_flight)  # Sélectionne toutes les variables sauf age_FMR
+drop1(lmer(new_formula, data = na.omit(data)), test = "Chisq")
+
+# On supprime pgi_1083
+new_formula <- update(new_formula, . ~ . - Pgi_1083)  # Sélectionne toutes les variables sauf age_FMR
+drop1(lmer(new_formula, data = na.omit(data)), test = "Chisq")
+
+
+# On supprime pgi_331
+new_formula <- update(new_formula, . ~ . - Pgi_331)  # Sélectionne toutes les variables sauf age_FMR
+drop1(lmer(new_formula, data = na.omit(data)), test = "Chisq")
+
+
+# On supprime FMR
+new_formula <- update(new_formula, . ~ . - FMR)  # Sélectionne toutes les variables sauf age_FMR
+drop1(lmer(new_formula, data = na.omit(data)), test = "Chisq")
+
+
+# On supprime takeoff_time
+new_formula <- update(new_formula, . ~ . - takeoff_time)  # Sélectionne toutes les variables sauf age_FMR
+drop1(lmer(new_formula, data = na.omit(data)), test = "Chisq")
+
+# On supprime mass
+new_formula <- update(new_formula, . ~ . - mass)  # Sélectionne toutes les variables sauf age_FMR
+drop1(lmer(new_formula, data = na.omit(data)), test = "Chisq")
+
+
+# On supprime Pgi_105
+new_formula <- update(new_formula, . ~ . - Pgi_105)  # Sélectionne toutes les variables sauf age_FMR
+drop1(lmer(new_formula, data = na.omit(data)), test = "Chisq")
+```
+
+
+Tous les effets sont significatifs, mais toujours un problème de colinéarité avec l'effet aléatoire. Le modèle mixte n'est donc pas valide.
+
+```{r}
+mod_candidat <- lmer(new_formula, data = na.omit(data))
+Anova(mod_candidat, type = "III")
+summary(mod_candidat)
+```
+
 
 ### --- Evaluations des résidus
 
@@ -756,7 +866,10 @@ qqline(residuals(mod_candidat),col='red')
 
 
 # Cooks
-plot(cooks.distance(mod_candidat), type = "h", ylim = c(0, 1), main="Cooks distribuance")
+plot(cooks.distance(mod_candidat), type = "h", ylim = c(0, 1), main = "Cooks distribuance")
 abline(h = 1, col = 2,lwd = 3)
 
 ```
+
+On obtient exactement le même modèle que précedemment car les valeurs de l'effet aléatoire sont = 0.
+
