@@ -873,3 +873,54 @@ abline(h = 1, col = 2,lwd = 3)
 
 On obtient exactement le même modèle que précedemment car les valeurs de l'effet aléatoire sont = 0.
 
+Le modèle est donc : 
+
+mean_T_flight = 1.13 + 0.71 * air_T_flight - 1.74 * flight_duration + 1.79 * disturbed_flight[=='YES'] + 0.56 * takeoff_T_thorax
+
+
+# CROSS VALIDATION DU MODELE ----------------------------------------------
+
+On cherche à valider le pouvoir prédictif du modèle candidat avec la méthode de la cross validation en K-fold.
+
+L'intérêt est de générer deux sous tableaux de données de tailles différentes : 'Entraînement' pour générer le modèle à partir ce ces données, et petit tableau 'Test' afin de tester la précision du modèle. Ce processus est effectué K fois et à chaque fois, un score de précision est calculé. 
+Le nombre K est choisi en fonction de la taille du dataset. Par défaut, on choisit K = 10. 
+
+Le résultat est une valeur de précision du modèle retenu (R²), les coefficients de chaque variable et l'errreur associée (RMSE et MAE).
+
+La cross validation est possible grâce aux fonction 'trainControl' et 'train' du package 'caret'. 
+
+```{r}
+library(caret) 
+k<-10 # Valeur par defaut souvent utilisee
+
+# Définir le contrôle de la validation croisée avec preProcess
+ctrl <- trainControl(method = "cv", number = k) 
+# Method = cross validation
+# number = nombre de plis
+# Mettre l'argument "MedianImpute" permet de combler les NAs
+
+# Entraîner le modèle avec train()
+model <- train(mean_T_flight ~ air_T + flight_duration + disturbed_flight + takeoff_T_thorax, data = data, 
+               method = "glm", trControl = ctrl, na.action = na.omit) 
+
+# Les NAs sont omis pour avoir le meme modele qu'initialement
+# Cependant, il est possible d'utiliser l'argument 'MedianImpute' dans la fonction trainControl pour générer des valeurs pour les NAs
+
+print(model)
+```
+On obtient une précision de R² = 0.78 pour le modèle candidat.   
+
+
+### Modele final 
+```{r}
+model$finalModel
+```
+ Le modele retenu par la validation croisee est 
+mean_T_flight = 0.32 + 0.73 * air_T - 1.49 * flight_duration + 1.53 * disturbed_flight[==YES]+ 0.57 * takeoff_T_thorax
+
+Avec 75 ddl, 71 residus. 
+
+Les predictions pour chaque pli : 
+```{r}
+model$resample
+```
