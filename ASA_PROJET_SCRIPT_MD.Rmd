@@ -265,20 +265,51 @@ On transorme les variables suivantes avec le logaritme pour 'normaliser' la dist
 -   takeoff_time
 
 ```{r}
-data$eclosion_day <- log(data$eclosion_day)
-data$mass <- log(data$mass)
-data$FMR_day <- log(data$FMR_day)
-data$flight_day <- log(data$flight_day)
+vp_transfo <-
+  c("eclosion_day",
+    "mass",
+    "FMR_day",
+    "flight_day",
+    "humidity_flight",
+    "flight_duration",
+    "takeoff_time"
+  )
+
+par(mfrow = c(1, 3))
+for (i in vp_transfo){
+
+    qqnorm(data[,i], pch = 16, main = "Sans transformation", ylab = i)
+    qqline(data[,i], col = 'red')
+
+    qqnorm(log(data[,i]), pch = 16, main = "Log transformation", ylab = i)
+    qqline(log(data[,i]), col = 'red')
+
+    qqnorm(sqrt(data[,i]), pch = 16, main = "Sqrt transformation", ylab = i)
+    qqline(sqrt(data[,i]), col = 'red')
+}
+
+# for (i in vp_transfo){
+# 
+#     hist(data[,i], main = "Sans transformation", ylab = i)
+# 
+#     hist(log(data[,i]), main = "Log transformation", ylab = i)
+# 
+#     hist(sqrt(data[,i]), main = "Sqrt transformation", ylab = i)
+# }
+
+#data$eclosion_day <- log(data$eclosion_day)
+#data$mass <- log(data$mass)
+#data$FMR_day <- log(data$FMR_day)
+#data$flight_day <- log(data$flight_day)
 data$humidity_flight <- log(data$humidity_flight)
 data$flight_duration <- log(data$flight_duration)
-data$takeoff_time <- log(data$takeoff_time)
+#data$takeoff_time <- log(data$takeoff_time)
 ```
 
 \
 \
 
 ### --- Visualisation des distribution mean_T_flight \~ X
-
 **Facteurs**
 
 ```{r, echo = F}
@@ -370,7 +401,7 @@ legend("bottomright", legend = c("Femelles","Males"),
 
 ```
 
-Les femelles sont nettement plus lourdes que les mâles ! **Intéraction sexe x masse** sur la température moyenne du corps pendant le vol.
+Les femelles sont nettement plus lourdes que les mâles ! Pas d'intéraction sexe x masse sur la température moyenne du corps pendant le vol.
 
 ### --- y \~ sexe\*FMR
 
@@ -532,6 +563,9 @@ On choisit un seuil de corrélation **R = .7**. On observe une corrélation fort
 
 ```{r}
 data <- data[!colnames(data) %in% c("eclosion_day", "flight_day", "age_flight", "dew_flight", "stop_flight", "end_flight_time")]
+
+# On renomme le nom des lignes
+rownames(data) <- 1:nrow(data)
 ```
 
 # MODELISATION
@@ -658,27 +692,98 @@ summary(mod_candidat)
 Le **modèle candidat final** est donc le modèle ci-dessus. Avant de l'interpréter on évalue la qualité du modèle.
 
 ### --- Evaluations des résidus
-
+#### Normalité,  homogénéité des variance et contributions aberrantes (Cooks) 
 ```{r}
-par(mfrow = c(1, 3))
+par(mfrow = c(1, 2))
 hist(mod_candidat$residuals, col = "blue", breaks = 20, main = "Histogram of model residuals")
 qqnorm(mod_candidat$residuals,pch=16,col='blue',xlab='')
 qqline(mod_candidat$residuals,col='red')
 
+# Résidus vs fitted
+plot(residuals(mod_candidat)~fitted(mod_candidat),
+      col='blue',
+      pch=16,
+     ylab = "Résidus")
+abline(h = 0)
 
-# Cooks
-plot(cooks.distance(mod_candidat), type = "h", ylim = c(0, 1), main = "Cooks distribuance")
+# Cooks : présence de contributions aberrantes
+plot(cooks.distance(mod_candidat), type = "h", ylim = c(0, 1), main = "Cooks distribuance", ylab = "Distance de Cooks")
 abline(h = 1, col = 2,lwd = 3)
-
 ```
 
-Les résidus sont distribués normalement, et aucun pattern ne semble émergé. Le graphique de Cooks ne montre la présence d'aucun poids aberrant parmi les résidus. Le modèle est donc interprétable !
+Deux points semblent se démarquer dans les résidus. On les identifie :
+```{r}
+outliers <- as.numeric(names(which(mod_candidat$residuals < -4)))
+outliers
+```
+Ces outliers correspondent aux lignes 38 et 79.
+
+\
+
+On cherche sur quel variable est le problème en représantant y ~ chque variable prédictive avec : rond plein : disturbed == YES et rond vide : disrturbed == NO
+```{r, echo = F}
+# Extraction noms des variables prédictives du modèle
+var_mod <- all.vars(formula(mod_candidat))
+var_mod <- var_mod[!var_mod %in% "mean_T_flight"]
+
+par(mfrow = c(1,3))
+i <- 1
+visu <- apply(X = data_num[, colnames(data_num) %in% var_mod], MARGIN = 2, function(x){
+  
+  plot(
+    data$mean_T_flight  ~ x,
+    ylab = "T",
+    main = "",
+    xlab = colnames(data_num[, colnames(data_num) %in% var_mod])[i],
+    ylim = c(
+      min(data$mean_T_flight, na.rm = T) - 1,
+      max(data$mean_T_flight  + 1, na.rm = T)
+    )
+  )
+  points(data$mean_T_flight[data$disturbed_flight == "YES"] ~ x[data$disturbed_flight == "YES"], col = "black", pch = 19)
+  
+  points(data$mean_T_flight[outliers] ~ x[outliers], col = "red",  pch = 19)
+  abline(lm(data$mean_T_flight  ~ x), col = "red")
+  
+  i <<- i + 1    
+}
+)
+```
+
+\
+<!-- \ -->
+
+<!-- On teste tout de même le modèle sans ces outliers :  -->
+<!-- ```{r} -->
+<!-- mod_candidat <- lm(formula(mod_candidat), data = data[-outliers,]) -->
+<!-- par(mfrow = c(1, 2)) -->
+<!-- hist(mod_candidat$residuals, col = "blue", breaks = 20, main = "Histogram of model residuals") -->
+<!-- qqnorm(mod_candidat$residuals,pch=16,col='blue',xlab='') -->
+<!-- qqline(mod_candidat$residuals,col='red') -->
+
+<!-- # Résidus vs fitted -->
+<!-- plot(residuals(mod_candidat)~fitted(mod_candidat), -->
+<!--       col='blue', -->
+<!--       pch=16, -->
+<!--      ylab = "Résidus") -->
+<!-- abline(h = 0) -->
+
+<!-- # Cooks : présence de contributions aberrantes -->
+<!-- plot(cooks.distance(mod_candidat), type = "h", ylim = c(0, 1), main = "Cooks distribuance", ylab = "Distance de Cooks") -->
+<!-- abline(h = 1, col = 2,lwd = 3) -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- summary(mod_candidat) -->
+<!-- ``` -->
 
 ### --- Pouvoir explicatif de chaque variable prédictive
 
 ```{r}
 ano_mod <- Anova(mod_candidat, type = "III")
 var_expliquee <- round(ano_mod$`Sum Sq`/ sum(ano_mod$`Sum Sq`), 3)  # Ratio de variance expliquée par variable
+var_explique_se <- 
 names(var_expliquee) <- rownames(ano_mod)
 
 bar <- barplot(var_expliquee, ylab = "% variance expliquée", 
@@ -789,91 +894,101 @@ coli <- vif(mod, type = 'predictor')
 coli[,1][coli[,1] == max(coli[,1])]   # identification du plus grand vif
 
 ```
-
-
-La colinéarité a été contrôlée !
-
-### --- Selection du meilleur modèle
-
-On sélectionne le meilleur modèle avec une procédure backward / forward basé sur l'AIC.
-
-```{r message=FALSE, warning=FALSE, results='hide'}
-# On teste l'ensemble des interactions possibles variables (morphologiques + génétiques)*sex
-initial_formula <- formula(mod)
-
-# Ajuster un modèle linéaire initial avec la formule initiale
-initial_model <- lmer(initial_formula, data = na.omit(data))
-
-# Selection
-drop1(initial_model, test = "Chisq")
-
-
-# On supprime age_FMR
-new_formula <- update(initial_formula, . ~ . - age_FMR)  # Sélectionne toutes les variables sauf age_FMR
-drop1(lmer(new_formula, data = na.omit(data)), test = "Chisq")
-
-
-# On supprime solar_radiation_flight
-new_formula <- update(new_formula, . ~ . - solar_radiation_flight)  # Sélectionne toutes les variables sauf age_FMR
-drop1(lmer(new_formula, data = na.omit(data)), test = "Chisq")
-
-# On supprime humidity_flight
-new_formula <- update(new_formula, . ~ . - humidity_flight)  # Sélectionne toutes les variables sauf age_FMR
-drop1(lmer(new_formula, data = na.omit(data)), test = "Chisq")
-
-# On supprime pgi_1083
-new_formula <- update(new_formula, . ~ . - Pgi_1083)  # Sélectionne toutes les variables sauf age_FMR
-drop1(lmer(new_formula, data = na.omit(data)), test = "Chisq")
-
-
-# On supprime pgi_331
-new_formula <- update(new_formula, . ~ . - Pgi_331)  # Sélectionne toutes les variables sauf age_FMR
-drop1(lmer(new_formula, data = na.omit(data)), test = "Chisq")
-
-
-# On supprime FMR
-new_formula <- update(new_formula, . ~ . - FMR)  # Sélectionne toutes les variables sauf age_FMR
-drop1(lmer(new_formula, data = na.omit(data)), test = "Chisq")
-
-
-# On supprime takeoff_time
-new_formula <- update(new_formula, . ~ . - takeoff_time)  # Sélectionne toutes les variables sauf age_FMR
-drop1(lmer(new_formula, data = na.omit(data)), test = "Chisq")
-
-# On supprime mass
-new_formula <- update(new_formula, . ~ . - mass)  # Sélectionne toutes les variables sauf age_FMR
-drop1(lmer(new_formula, data = na.omit(data)), test = "Chisq")
-
-
-# On supprime Pgi_105
-new_formula <- update(new_formula, . ~ . - Pgi_105)  # Sélectionne toutes les variables sauf age_FMR
-drop1(lmer(new_formula, data = na.omit(data)), test = "Chisq")
-```
-
-
-Tous les effets sont significatifs, mais toujours un problème de colinéarité avec l'effet aléatoire. Le modèle mixte n'est donc pas valide.
+On teste la colinéarité de l'effet principal en l'intégrant comme effet fixe :
 
 ```{r}
-mod_candidat <- lmer(new_formula, data = na.omit(data))
-Anova(mod_candidat, type = "III")
-summary(mod_candidat)
+mod <- lm(formula = mean_T_flight ~  + FMR_day + age_FMR + FMR +
+      air_T + humidity_flight + solar_radiation_flight + flight_duration + disturbed_flight +
+       takeoff_T_thorax + takeoff_time + mass + Pgi_105 + Pgi_1083 + Pgi_331,
+      data = data)
+
+coli <- vif(mod, type = 'predictor')
+coli[coli$GVIF == max(coli$GVIF),]["GVIF"]  
 ```
 
+L'effet aléatoire est hautement multicolinéaire (d'où l'erreur "matrice singulière"). Il n'est pas intégrable dans le modèle, on revient donc à notre modèle initial à effets fixes.
 
-### --- Evaluations des résidus
+<!-- ### --- Selection du meilleur modèle -->
 
-```{r}
-par(mfrow = c(1, 3))
-hist(residuals(mod_candidat), col = "blue", breaks = 20, main = "Histogram of model residuals")
-qqnorm(residuals(mod_candidat),pch=16,col='blue',xlab='')
-qqline(residuals(mod_candidat),col='red')
+<!-- On sélectionne le meilleur modèle avec une procédure backward / forward basé sur l'AIC. -->
+
+<!-- ```{r message=FALSE, warning=FALSE, results='hide'} -->
+<!-- # On teste l'ensemble des interactions possibles variables (morphologiques + génétiques)*sex -->
+<!-- initial_formula <- formula(mod) -->
+
+<!-- # Ajuster un modèle linéaire initial avec la formule initiale -->
+<!-- initial_model <- lmer(initial_formula, data = na.omit(data)) -->
+
+<!-- # Selection -->
+<!-- drop1(initial_model, test = "Chisq") -->
 
 
-# Cooks
-plot(cooks.distance(mod_candidat), type = "h", ylim = c(0, 1), main = "Cooks distribuance")
-abline(h = 1, col = 2,lwd = 3)
+<!-- # On supprime age_FMR -->
+<!-- new_formula <- update(initial_formula, . ~ . - age_FMR)  # Sélectionne toutes les variables sauf age_FMR -->
+<!-- drop1(lmer(new_formula, data = na.omit(data)), test = "Chisq") -->
 
-```
 
-On obtient exactement le même modèle que précedemment car les valeurs de l'effet aléatoire sont = 0.
+<!-- # On supprime solar_radiation_flight -->
+<!-- new_formula <- update(new_formula, . ~ . - solar_radiation_flight)  # Sélectionne toutes les variables sauf age_FMR -->
+<!-- drop1(lmer(new_formula, data = na.omit(data)), test = "Chisq") -->
+
+<!-- # On supprime humidity_flight -->
+<!-- new_formula <- update(new_formula, . ~ . - humidity_flight)  # Sélectionne toutes les variables sauf age_FMR -->
+<!-- drop1(lmer(new_formula, data = na.omit(data)), test = "Chisq") -->
+
+<!-- # On supprime pgi_1083 -->
+<!-- new_formula <- update(new_formula, . ~ . - Pgi_1083)  # Sélectionne toutes les variables sauf age_FMR -->
+<!-- drop1(lmer(new_formula, data = na.omit(data)), test = "Chisq") -->
+
+
+<!-- # On supprime pgi_331 -->
+<!-- new_formula <- update(new_formula, . ~ . - Pgi_331)  # Sélectionne toutes les variables sauf age_FMR -->
+<!-- drop1(lmer(new_formula, data = na.omit(data)), test = "Chisq") -->
+
+
+<!-- # On supprime FMR -->
+<!-- new_formula <- update(new_formula, . ~ . - FMR)  # Sélectionne toutes les variables sauf age_FMR -->
+<!-- drop1(lmer(new_formula, data = na.omit(data)), test = "Chisq") -->
+
+
+<!-- # On supprime takeoff_time -->
+<!-- new_formula <- update(new_formula, . ~ . - takeoff_time)  # Sélectionne toutes les variables sauf age_FMR -->
+<!-- drop1(lmer(new_formula, data = na.omit(data)), test = "Chisq") -->
+
+<!-- # On supprime mass -->
+<!-- new_formula <- update(new_formula, . ~ . - mass)  # Sélectionne toutes les variables sauf age_FMR -->
+<!-- drop1(lmer(new_formula, data = na.omit(data)), test = "Chisq") -->
+
+
+<!-- # On supprime Pgi_105 -->
+<!-- new_formula <- update(new_formula, . ~ . - Pgi_105)  # Sélectionne toutes les variables sauf age_FMR -->
+<!-- drop1(lmer(new_formula, data = na.omit(data)), test = "Chisq") -->
+<!-- ``` -->
+
+
+<!-- Tous les effets sont significatifs, mais toujours un problème de colinéarité avec l'effet aléatoire. Le modèle mixte n'est donc pas valide. -->
+
+<!-- # ```{r} -->
+<!-- # mod_candidat <- lmer(new_formula, data = na.omit(data)) -->
+<!-- # Anova(mod_candidat, type = "III") -->
+<!-- # summary(mod_candidat) -->
+<!-- # ``` -->
+
+
+<!-- ### --- Evaluations des résidus -->
+
+<!-- ```{r} -->
+<!-- par(mfrow = c(1, 3)) -->
+<!-- hist(residuals(mod_candidat), col = "blue", breaks = 20, main = "Histogram of model residuals") -->
+<!-- qqnorm(residuals(mod_candidat),pch=16,col='blue',xlab='') -->
+<!-- qqline(residuals(mod_candidat),col='red') -->
+
+
+<!-- # Cooks -->
+<!-- plot(cooks.distance(mod_candidat), type = "h", ylim = c(0, 1), main = "Cooks distribuance") -->
+<!-- abline(h = 1, col = 2,lwd = 3) -->
+
+<!-- ``` -->
+
+<!-- On obtient exactement le même modèle que précedemment car les valeurs de l'effet aléatoire sont = 0. -->
 
