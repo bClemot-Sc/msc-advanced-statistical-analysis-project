@@ -24,10 +24,8 @@ En effet, selon la littérature :
 
   - **ASA_PROJECT_SCRIPT_MD.Rmd** : fichier RMarkdown avec les analyses complètes
   - **ASA_PROJECT_SCRIPT_MD.html** : fichier htlm avec les analyses complètes
-  - **ASA_PROJECT_SCRIPT_missMDA.Rmd** : fichier Markdown avec les analyses à partir du dataset avec les NA régénérés
-  - **ASA_PROJECT_SCRIPT_missMDA.html** : fichier html avec les analyses à partir du dataset avec les NA régénérés
   - **ASA_data_projet.txt** : Tableau de données à analyser sous format texte
-  - **ASA_data_projet.xlsx** : Tableau de données à analyser sous format excel
+  - **data_butterfly.xlsx** : Tableau de données à analyser sous format excel
   - **Article_data_Mattila_2015.pdf** : pdf de l'article sur lequel se base l'étude
 
 
