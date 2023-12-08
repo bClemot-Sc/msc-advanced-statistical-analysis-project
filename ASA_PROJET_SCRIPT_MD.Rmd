@@ -136,6 +136,8 @@ colnames(data)[1:22] <- c(
 
 #### --- Supprime la colonne "ID"
 
+# Moi j'aurais plutôt ça comme ça
+
 ```{r}
 data <- data[, !colnames(data) %in% "ID"]
 ```
