@@ -14,6 +14,8 @@ graphics.off() # Ferme les fenêtres ouvertes lors des exécutions précédentes
 Lien GitHub du projet : https://github.com/bClemot-Sc/Projet-ASA
 
 # Packages ----------------------------------------------
+
+#@ Moi j'aurais fais plutôt ça : zdeflm,lf  ekkemzd v
 #### Installation (si nécessaire)
 ```{r}
 # install.packages("corrplot")  
